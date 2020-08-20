@@ -11,10 +11,10 @@ import sys
 
 grid_size = 10
 THRESH = 0.75
-problem = 'gym_SpringBoxEnv:SpringBoxEnv-v0'
+problem = "gym_SpringBoxEnv:SpringBoxEnv-v0"
 
-#env = gym.make(problem, grid_size = grid_size, THRESH = THRESH)
-env = SpringBoxEnv(grid_size = grid_size, THRESH = THRESH)
+# env = gym.make(problem, grid_size = grid_size, THRESH = THRESH)
+env = SpringBoxEnv(grid_size=grid_size, THRESH=THRESH)
 
 num_states = env.observation_space.shape
 print("Size of State Space ->  {}".format(num_states))
@@ -22,7 +22,7 @@ num_actions = env.action_space.shape
 print("Size of Action Space ->  {}".format(num_actions))
 
 upper_bound = env.action_space.high[0][0]
-#print(upper_bound, "UB")
+# print(upper_bound, "UB")
 lower_bound = env.action_space.low[0][0]
 
 print("Max Value of Action ->  {}".format(upper_bound))
@@ -92,10 +92,16 @@ class Buffer:
 
         # Instead of list of tuples as the exp.replay concept go
         # We use different np.arrays for each tuple element
-        self.state_buffer = np.zeros((self.buffer_capacity, num_states[0], num_states[1], num_states[2]))
-        self.action_buffer = np.zeros((self.buffer_capacity, num_actions[0], num_actions[1]))
+        self.state_buffer = np.zeros(
+            (self.buffer_capacity, num_states[0], num_states[1], num_states[2])
+        )
+        self.action_buffer = np.zeros(
+            (self.buffer_capacity, num_actions[0], num_actions[1])
+        )
         self.reward_buffer = np.zeros((self.buffer_capacity, 1))
-        self.next_state_buffer = np.zeros((self.buffer_capacity, num_states[0],num_states[1], num_states[2]))
+        self.next_state_buffer = np.zeros(
+            (self.buffer_capacity, num_states[0], num_states[1], num_states[2])
+        )
 
     # Takes (s,a,r,s') obervation tuple as input
     def record(self, obs_tuple):
@@ -137,17 +143,16 @@ class Buffer:
             zip(critic_grad, critic_model.trainable_variables)
         )
 
-        with tf.GradientTape() as tape:# actor_model.summary(line_length=None, positions=None, print_fn=None)
-# critic_model.summary(line_length=None, positions=None, print_fn=None)
+        with tf.GradientTape() as tape:  # actor_model.summary(line_length=None, positions=None, print_fn=None)
+            # critic_model.summary(line_length=None, positions=None, print_fn=None)
             actions = actor_model(state_batch)
             critic_value = critic_model([state_batch, actions])
             # Used `-value` as we want to maximize the value given
             # by the critic for our actions
             actor_loss = -tf.math.reduce_mean(critic_value)
 
-
         actor_grad = tape.gradient(actor_loss, actor_model.trainable_variables)
-        if np.random.randint(100)>95:
+        if np.random.randint(100) > 95:
             print(actor_grad)
         actor_optimizer.apply_gradients(
             zip(actor_grad, actor_model.trainable_variables)
@@ -186,7 +191,7 @@ as we use the `tanh` activation.
 
 def get_actor():
     # Initialize weights between -3e-3 and 3-e3
-    #last_init = tf.random_uniform_initializer(minval=-0.003, maxval=0.003)
+    # last_init = tf.random_uniform_initializer(minval=-0.003, maxval=0.003)
     last_init = tf.keras.initializers.GlorotNormal(seed=None)
     #
     # inputs = layers.Input(shape=num_states)
@@ -199,17 +204,30 @@ def get_actor():
     # outputs = layers.Reshape((num_actions[0],num_actions[1]))(outputs)
     #
     inputs = layers.Input(shape=num_states)
-    #inputs1 = layers.Reshape((grid_size*10,grid_size*10,3))(inputs)
-    #out = layers.BatchNormalization()(inputs)
-    out = layers.Conv2D(64, 3 ,strides = 1, activation="relu", kernel_initializer=last_init, data_format='channels_first')(inputs)
+    # inputs1 = layers.Reshape((grid_size*10,grid_size*10,3))(inputs)
+    # out = layers.BatchNormalization()(inputs)
+    out = layers.Conv2D(
+        64,
+        3,
+        strides=1,
+        activation="relu",
+        kernel_initializer=last_init,
+        data_format="channels_first",
+    )(inputs)
     out = layers.BatchNormalization()(out)
-    out = layers.Conv2D(128, 4 ,strides = 1, activation="relu", kernel_initializer=last_init)(out)
+    out = layers.Conv2D(
+        128, 4, strides=1, activation="relu", kernel_initializer=last_init
+    )(out)
     out = layers.BatchNormalization()(out)
-    outputs = layers.Conv2D(256, 5 ,strides = 1, activation="relu", kernel_initializer=last_init)(out)
+    outputs = layers.Conv2D(
+        256, 5, strides=1, activation="relu", kernel_initializer=last_init
+    )(out)
     out = layers.Flatten()(out)
     out = layers.BatchNormalization()(out)
-    outputs = layers.Dense(num_actions[0]*num_actions[1], activation="relu", kernel_initializer=last_init)(out)
-    outputs = layers.Reshape((num_actions[0],num_actions[1]))(outputs)
+    outputs = layers.Dense(
+        num_actions[0] * num_actions[1], activation="relu", kernel_initializer=last_init
+    )(out)
+    outputs = layers.Reshape((num_actions[0], num_actions[1]))(outputs)
     # Our upper bound is 2.0 for Pendulum.
     outputs = outputs * upper_bound
     model = tf.keras.Model(inputs, outputs)
@@ -239,7 +257,7 @@ def get_critic():
     # # Action as input
     action_input = layers.Input(shape=num_actions)
     action_input1 = layers.Flatten()(action_input)
-    out = layers.Dense(128, activation = "relu")(action_input1)
+    out = layers.Dense(128, activation="relu")(action_input1)
     out = layers.BatchNormalization()(out)
     action_out = layers.Dense(32, activation="relu")(out)
     action_out = layers.BatchNormalization()(action_out)
@@ -254,8 +272,6 @@ def get_critic():
     # out = layers.Flatten()(out)
     # out = layers.Dense(32, activation="relu")(out)
     # action_out = layers.BatchNormalization()(out)
-
-
 
     # Both are passed through seperate layer before concatenating
     concat = layers.Concatenate()([state_out, action_out])
@@ -281,12 +297,12 @@ exploration.
 def policy(state, noise_object):
     sampled_actions = actor_model(state)
     sampled_actions = tf.squeeze(sampled_actions)
-    if np.random.randint(100)>95:
-        #print(np.max(state), np.min(state))
-        #print("YEERT")
+    if np.random.randint(100) > 95:
+        # print(np.max(state), np.min(state))
+        # print("YEERT")
         print(sampled_actions, "sampled")
-        #print(actor_model.get_weights())
-    #print(sampled_actions.shape, "SA SHAPE")
+        # print(actor_model.get_weights())
+    # print(sampled_actions.shape, "SA SHAPE")
     noise = noise_object()
     # Adding noise to action
     sampled_actions = sampled_actions.numpy() + noise
@@ -302,7 +318,9 @@ def policy(state, noise_object):
 """
 
 std_dev = 0.2
-ou_noise = OUActionNoise(mean=np.zeros(num_actions), std_deviation=float(std_dev) * np.ones(num_actions))
+ou_noise = OUActionNoise(
+    mean=np.zeros(num_actions), std_deviation=float(std_dev) * np.ones(num_actions)
+)
 
 actor_model = get_actor()
 critic_model = get_critic()
@@ -343,7 +361,7 @@ ep_reward_list = []
 # To store average reward history of last few episodes
 avg_reward_list = []
 
-reload =False
+reload = False
 
 if reload:
     actor_model.load_weights("SpringBox_actor.h5")
@@ -369,35 +387,30 @@ for ep in range(total_episodes):
 
         action = policy(tf_prev_state, ou_noise)[0]
 
-
         # Recieve state and reward from environment.
         state, reward, done, info = env.step(action)
-
 
         buffer.record((prev_state, action, reward, state))
 
         episodic_reward += reward
 
-
         buffer.learn()
         update_target(tau)
 
-
-        if done or ep_frame >18:
+        if done or ep_frame > 18:
             break
 
         prev_state = state
         ep_frame += 1
 
-
     ep_reward_list.append(episodic_reward)
 
     # Mean of last 40 episodes
     render = False
-    if ep %5 == 0:
+    if ep % 5 == 0:
         render = True
     avg_reward = np.mean(ep_reward_list[-40:])
-    if ep %1 == 0:
+    if ep % 1 == 0:
         print("Episode * {} * Avg Reward is ==> {}".format(ep, avg_reward))
     avg_reward_list.append(avg_reward)
 
@@ -407,7 +420,6 @@ for ep in range(total_episodes):
 
         target_actor.save_weights("SpringBox_target_actor.h5")
         target_critic.save_weights("SpringBox_target_critic.h5")
-
 
 
 # Plotting graph
