@@ -1,3 +1,10 @@
+"""
+Title: Deep Deterministic Policy Gradient (DDPG)
+Author: [amifunny](https://github.com/amifunny)
+Date created: 2020/06/04
+Last modified: 2020/06/06
+Description: Implementing DDPG algorithm on the Inverted Pendulum Problem.
+"""
 
 import gym
 import tensorflow as tf
@@ -5,30 +12,22 @@ from tensorflow.keras import layers
 import numpy as np
 import matplotlib.pyplot as plt
 
-
 grid_size = 10
-THRESH = 0.75
-problem = 'gym_SpringBoxEnv:SpringBoxEnv-v0'
+problem = 'gym_SpringBoxEnv:SpringBoxEnv-v0'#"LunarLanderContinuous-v2"
+env = gym.make(problem, grid_size = grid_size, THRESH = 0.5)
 
-env = gym.make(problem, grid_size = grid_size, THRESH = THRESH)
-
-num_states = env.observation_space.shape
+num_states = env.observation_space.shape[0]
 print("Size of State Space ->  {}".format(num_states))
-num_actions = env.action_space.shape
+num_actions = env.action_space.shape[0]
 print("Size of Action Space ->  {}".format(num_actions))
 
-upper_bound = env.action_space.high[0][0]
-#print(upper_bound, "UB")
-lower_bound = env.action_space.low[0][0]
+upper_bound = env.action_space.high[0]
+lower_bound = env.action_space.low[0]
 
 print("Max Value of Action ->  {}".format(upper_bound))
 print("Min Value of Action ->  {}".format(lower_bound))
 
-"""
-To implement better exploration by the Actor network, we use noisy perturbations, specifically
-an **Ornstein-Uhlenbeck process** for generating noise, as described in the paper.
-It samples noise from a correlated normal distribution.
-"""
+
 
 
 class OUActionNoise:
@@ -41,6 +40,7 @@ class OUActionNoise:
         self.reset()
 
     def __call__(self):
+        # Formula taken from https://www.wikipedia.org/wiki/Ornstein-Uhlenbeck_process.
         x = (
             self.x_prev
             + self.theta * (self.mean - self.x_prev) * self.dt
@@ -58,21 +58,6 @@ class OUActionNoise:
             self.x_prev = np.zeros_like(self.mean)
 
 
-"""
-The `Buffer` class implements Experience Replay.
----
-![Algorithm](https://i.imgur.com/mS6iGyJ.jpg)
----
-**Critic loss** - Mean Squared Error of `y - Q(s, a)`
-where `y` is the expected return as seen by the Target network,
-and `Q(s, a)` is action value predicted by the Critic network. `y` is a moving target
-that the critic model tries to achieve; we make this target
-stable by updating the Target model slowly.
-**Actor loss** - This is computed using the mean of the value given by the Critic network
-for the actions taken by the Actor network. We seek to maximize this quantity.
-Hence we update the Actor network so that it produces actions that get
-the maximum predicted value as seen by the Critic, for a given state.
-"""
 
 
 class Buffer:
@@ -88,16 +73,17 @@ class Buffer:
 
         # Instead of list of tuples as the exp.replay concept go
         # We use different np.arrays for each tuple element
-        self.state_buffer = np.zeros((self.buffer_capacity, num_states[0], num_states[1], num_states[2]))
-        self.action_buffer = np.zeros((self.buffer_capacity, num_actions[0], num_actions[1]))
+        self.state_buffer = np.zeros((self.buffer_capacity, num_states))
+        self.action_buffer = np.zeros((self.buffer_capacity, num_actions))
         self.reward_buffer = np.zeros((self.buffer_capacity, 1))
-        self.next_state_buffer = np.zeros((self.buffer_capacity, num_states[0],num_states[1], num_states[2]))
+        self.next_state_buffer = np.zeros((self.buffer_capacity, num_states))
 
     # Takes (s,a,r,s') obervation tuple as input
     def record(self, obs_tuple):
         # Set index to zero if buffer_capacity is exceeded,
         # replacing old records
         index = self.buffer_counter % self.buffer_capacity
+
         self.state_buffer[index] = obs_tuple[0]
         self.action_buffer[index] = obs_tuple[1]
         self.reward_buffer[index] = obs_tuple[2]
@@ -108,7 +94,6 @@ class Buffer:
     # We compute the loss and update parameters
     def learn(self):
         # Get sampling range
-
         record_range = min(self.buffer_counter, self.buffer_capacity)
         # Randomly sample indices
         batch_indices = np.random.choice(record_range, self.batch_size)
@@ -133,18 +118,14 @@ class Buffer:
             zip(critic_grad, critic_model.trainable_variables)
         )
 
-        with tf.GradientTape() as tape:# actor_model.summary(line_length=None, positions=None, print_fn=None)
-# critic_model.summary(line_length=None, positions=None, print_fn=None)
+        with tf.GradientTape() as tape:
             actions = actor_model(state_batch)
             critic_value = critic_model([state_batch, actions])
             # Used `-value` as we want to maximize the value given
             # by the critic for our actions
             actor_loss = -tf.math.reduce_mean(critic_value)
 
-
         actor_grad = tape.gradient(actor_loss, actor_model.trainable_variables)
-        if np.random.randint(100)>95:
-            print(actor_grad)
         actor_optimizer.apply_gradients(
             zip(actor_grad, actor_model.trainable_variables)
         )
@@ -182,30 +163,25 @@ as we use the `tanh` activation.
 
 def get_actor():
     # Initialize weights between -3e-3 and 3-e3
-    #last_init = tf.random_uniform_initializer(minval=-0.003, maxval=0.003)
-    last_init = tf.keras.initializers.GlorotNormal(seed=None)
+    last_init = tf.random_uniform_initializer(minval=-0.003, maxval=0.003)
     #
-    # inputs = layers.Input(shape=num_states)
-    # inputs1 = layers.Flatten()(inputs)
-    # out = layers.Dense(512, activation="relu")(inputs1)
+    # inputs = layers.Input(shape=(num_states,))
+    # out = layers.Dense(512, activation="relu")(inputs)
     # out = layers.BatchNormalization()(out)
     # out = layers.Dense(512, activation="relu")(out)
     # out = layers.BatchNormalization()(out)
-    # outputs = layers.Dense(num_actions[0]*num_actions[1], activation="tanh", kernel_initializer=last_init)(out)
-    # outputs = layers.Reshape((num_actions[0],num_actions[1]))(outputs)
-    #
-    inputs = layers.Input(shape=num_states)
-    #inputs1 = layers.Reshape((grid_size*10,grid_size*10,3))(inputs)
-    #out = layers.BatchNormalization()(inputs)
-    out = layers.Conv2D(64, 3 ,strides = 2, activation="relu", kernel_initializer=last_init)(inputs)
-    out = layers.BatchNormalization()(out)
-    out = layers.Conv2D(128, 4 ,strides = 2, activation="relu", kernel_initializer=last_init)(out)
-    out = layers.BatchNormalization()(out)
-    outputs = layers.Conv2D(256, 5 ,strides = 2, activation="relu", kernel_initializer=last_init)(out)
+    # outputs = layers.Dense(num_actions, activation="tanh", kernel_initializer=last_init)(out)
+
+    inputs = layers.Input(shape=(num_states,))
+    out = layers.Reshape((grid_size*10,grid_size*10,1))(inputs)
+    out = layers.Conv2D(128, 5, strides = 2, activation = "relu")(out)
     out = layers.Flatten()(out)
     out = layers.BatchNormalization()(out)
-    outputs = layers.Dense(num_actions[0]*num_actions[1], activation="relu", kernel_initializer=last_init)(out)
-    outputs = layers.Reshape((num_actions[0],num_actions[1]))(outputs)
+    out = layers.Dense(512, activation="relu")(inputs)
+    out = layers.BatchNormalization()(out)
+    out = layers.Dense(512, activation="relu")(out)
+    out = layers.BatchNormalization()(out)
+    outputs = layers.Dense(num_actions, activation="tanh", kernel_initializer=last_init)(out)
     # Our upper bound is 2.0 for Pendulum.
     outputs = outputs * upper_bound
     model = tf.keras.Model(inputs, outputs)
@@ -214,45 +190,34 @@ def get_actor():
 
 def get_critic():
     # State as input
-    state_input = layers.Input(shape=num_states)
-    state_input1 = layers.Flatten()(state_input)
-    state_out = layers.Dense(128, activation="relu")(state_input1)
+    # state_input = layers.Input(shape=(num_states))
+    # state_out = layers.Dense(16, activation="relu")(state_input)
+    # state_out = layers.BatchNormalization()(state_out)
+    # state_out = layers.Dense(32, activation="relu")(state_out)
+    # state_out = layers.BatchNormalization()(state_out)
+    state_input = layers.Input(shape=(num_states))
+    state_out = layers.Reshape((grid_size*10,grid_size*10,1))(state_input)
+    state_out = layers.Conv2D(128, 5, strides = 2, activation = "relu")(state_out)
+    state_out = layers.Flatten()(state_out)
+    state_out = layers.BatchNormalization()(state_out)
+
+    state_out = layers.Dense(128, activation="relu")(state_input)
     state_out = layers.BatchNormalization()(state_out)
     state_out = layers.Dense(32, activation="relu")(state_out)
     state_out = layers.BatchNormalization()(state_out)
 
-    #
-    # state_input = layers.Input(shape = num_states)
-    # #out = layers.Reshape((grid_size*10,grid_size*10,1))(state_input)
-    # out = layers.Conv2D(64, 3 ,strides = 2, activation="relu")(state_input)
-    # out = layers.BatchNormalization()(out)
-    # out = layers.Conv2D(128, 3 ,strides = 2, activation="relu")(out)
-    # out = layers.BatchNormalization()(out)
-    # out = layers.Flatten()(out)
-    # out = layers.Dense(32, activation="relu")(out)
-    # state_out = layers.BatchNormalization()(out)
-    #
-    # # Action as input
-    action_input = layers.Input(shape=num_actions)
-    action_input1 = layers.Flatten()(action_input)
-    out = layers.Dense(128, activation = "relu")(action_input1)
-    out = layers.BatchNormalization()(out)
-    action_out = layers.Dense(32, activation="relu")(out)
+    # Action as input
+    # action_input = layers.Input(shape=(num_actions))
+    # action_out = layers.Dense(32, activation="relu")(action_input)
+    # action_out = layers.BatchNormalization()(action_out)
+
+    action_input = layers.Input(shape=(num_actions))
+    action_out = layers.Reshape((grid_size,grid_size,1))(action_input)
+    action_out = layers.Conv2D(32, 3, strides = 2, activation = "relu")(action_out)
+    action_out = layers.Flatten()(action_out)
     action_out = layers.BatchNormalization()(action_out)
-
-    #
-    # action_input = layers.Input(shape = num_actions)
-    # out = layers.Reshape((grid_size,grid_size,1))(action_input)
-    # out = layers.Conv2D(64, 3 ,strides = 2, activation="relu")(out)
-    # out = layers.BatchNormalization()(out)
-    # out = layers.Conv2D(128, 3 ,strides = 2, activation="relu")(out)
-    # out = layers.BatchNormalization()(out)
-    # out = layers.Flatten()(out)
-    # out = layers.Dense(32, activation="relu")(out)
-    # action_out = layers.BatchNormalization()(out)
-
-
-
+    action_out = layers.Dense(32, activation="relu")(action_input)
+    action_out = layers.BatchNormalization()(action_out)
     # Both are passed through seperate layer before concatenating
     concat = layers.Concatenate()([state_out, action_out])
 
@@ -276,12 +241,6 @@ exploration.
 
 def policy(state, noise_object):
     sampled_actions = tf.squeeze(actor_model(state))
-    if np.random.randint(100)>95:
-        #print(np.max(state), np.min(state))
-        #print("YEERT")
-        print(sampled_actions, "sampled")
-        #print(actor_model.get_weights())
-    #print(sampled_actions.shape, "SA SHAPE")
     noise = noise_object()
     # Adding noise to action
     sampled_actions = sampled_actions.numpy() + noise
@@ -297,13 +256,10 @@ def policy(state, noise_object):
 """
 
 std_dev = 0.2
-ou_noise = OUActionNoise(mean=np.zeros(num_actions), std_deviation=float(std_dev) * np.ones(num_actions))
+ou_noise = OUActionNoise(mean=np.zeros(num_actions), std_deviation=float(std_dev) * np.ones(1))
 
 actor_model = get_actor()
 critic_model = get_critic()
-# actor_model.summary(line_length=None, positions=None, print_fn=None)
-# critic_model.summary(line_length=None, positions=None, print_fn=None)
-
 
 target_actor = get_actor()
 target_critic = get_critic()
@@ -312,20 +268,29 @@ target_critic = get_critic()
 target_actor.set_weights(actor_model.get_weights())
 target_critic.set_weights(critic_model.get_weights())
 
+
+reload =False
+if reload:
+    actor_model.load_weights("SpringBox_actor.h5")
+    critic_model.load_weights("SpringBox_critic.h5")
+
+    target_actor.load_weights("SpringBox_target_actor.h5")
+    target_critic.load_weights("SpringBox_target_critic.h5")
+
 # Learning rate for actor-critic models
-critic_lr = 0.002
+critic_lr = 0.0002
 actor_lr = 0.0001
 
-critic_optimizer = tf.keras.optimizers.Adam(critic_lr, clipnorm=1.0)
-actor_optimizer = tf.keras.optimizers.Adam(actor_lr, clipnorm=1.0)
+critic_optimizer = tf.keras.optimizers.Adam(critic_lr)
+actor_optimizer = tf.keras.optimizers.Adam(actor_lr)
 
-total_episodes = 25000
+total_episodes = 10000
 # Discount factor for future rewards
 gamma = 0.99
 # Used to update target networks
 tau = 0.005
 
-buffer = Buffer(50000, 32)
+buffer = Buffer(50000, 64)
 
 """
 Now we implement our main training loop, and iterate over episodes.
@@ -338,64 +303,47 @@ ep_reward_list = []
 # To store average reward history of last few episodes
 avg_reward_list = []
 
-reload =False
-if reload:
-    actor_model.load_weights("SpringBox_actor.h5")
-    critic_model.load_weights("SpringBox_critic.h5")
-
-    target_actor.load_weights("SpringBox_target_actor.h5")
-    target_critic.load_weights("SpringBox_target_critic.h5")
-
 # Takes about 20 min to train
-render = False
+render = True
 for ep in range(total_episodes):
 
     prev_state = env.reset()
     episodic_reward = 0
     ep_frame = 0
+
+
     while True:
         # Uncomment this to see the Actor in action
         # But not in a python notebook.
+        # env.render()
         if render:
             env.render()
 
         tf_prev_state = tf.expand_dims(tf.convert_to_tensor(prev_state), 0)
-
         action = policy(tf_prev_state, ou_noise)[0]
-
-
         # Recieve state and reward from environment.
         state, reward, done, info = env.step(action)
 
-
         buffer.record((prev_state, action, reward, state))
-
         episodic_reward += reward
-
 
         buffer.learn()
         update_target(tau)
 
-
-        if done or ep_frame >18:
+        # End this episode when `done` is True
+        if done or ep_frame>18:
             break
 
         prev_state = state
         ep_frame += 1
 
-
     ep_reward_list.append(episodic_reward)
 
-    # Mean of last 40 episodes
-    render = False
-    if ep %5 == 0:
-        render = True
-    avg_reward = np.mean(ep_reward_list[-40:])
-    if ep %1 == 0:
-        print("Episode * {} * Avg Reward is ==> {}".format(ep, avg_reward))
-    avg_reward_list.append(avg_reward)
 
-    if ep % 10 == 0:
+    render = False
+    if ep %20 ==0:
+        render = True
+    if ep % 20 == 0:
         actor_model.save_weights("SpringBox_actor.h5")
         critic_model.save_weights("SpringBox_critic.h5")
 
@@ -403,6 +351,10 @@ for ep in range(total_episodes):
         target_critic.save_weights("SpringBox_target_critic.h5")
 
 
+    # Mean of last 40 episodes
+    avg_reward = np.mean(ep_reward_list[-40:])
+    print("Episode * {} * Avg Reward is ==> {}".format(ep, avg_reward))
+    avg_reward_list.append(avg_reward)
 
 # Plotting graph
 # Episodes versus Avg. Rewards
