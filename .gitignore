@@ -1,0 +1,6 @@
+# Ignore temporary folders
+__pycache__
+data/
+
+# Ignore data files
+*.h5
