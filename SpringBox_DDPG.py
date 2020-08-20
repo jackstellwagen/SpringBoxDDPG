@@ -1,16 +1,18 @@
-
 import gym
 import tensorflow as tf
 from tensorflow.keras import layers
 import numpy as np
 import matplotlib.pyplot as plt
+from env import SpringBoxEnv
+import sys
 
 
 grid_size = 10
 THRESH = 0.75
 problem = 'gym_SpringBoxEnv:SpringBoxEnv-v0'
 
-env = gym.make(problem, grid_size = grid_size, THRESH = THRESH)
+#env = gym.make(problem, grid_size = grid_size, THRESH = THRESH)
+env = SpringBoxEnv(grid_size = grid_size, THRESH = THRESH)
 
 num_states = env.observation_space.shape
 print("Size of State Space ->  {}".format(num_states))
@@ -197,11 +199,11 @@ def get_actor():
     inputs = layers.Input(shape=num_states)
     #inputs1 = layers.Reshape((grid_size*10,grid_size*10,3))(inputs)
     #out = layers.BatchNormalization()(inputs)
-    out = layers.Conv2D(64, 3 ,strides = 2, activation="relu", kernel_initializer=last_init)(inputs)
+    out = layers.Conv2D(64, 3 ,strides = 1, activation="relu", kernel_initializer=last_init, data_format='channels_first')(inputs)
     out = layers.BatchNormalization()(out)
-    out = layers.Conv2D(128, 4 ,strides = 2, activation="relu", kernel_initializer=last_init)(out)
+    out = layers.Conv2D(128, 4 ,strides = 1, activation="relu", kernel_initializer=last_init)(out)
     out = layers.BatchNormalization()(out)
-    outputs = layers.Conv2D(256, 5 ,strides = 2, activation="relu", kernel_initializer=last_init)(out)
+    outputs = layers.Conv2D(256, 5 ,strides = 1, activation="relu", kernel_initializer=last_init)(out)
     out = layers.Flatten()(out)
     out = layers.BatchNormalization()(out)
     outputs = layers.Dense(num_actions[0]*num_actions[1], activation="relu", kernel_initializer=last_init)(out)
@@ -275,7 +277,8 @@ exploration.
 
 
 def policy(state, noise_object):
-    sampled_actions = tf.squeeze(actor_model(state))
+    sampled_actions = actor_model(state)
+    sampled_actions = tf.squeeze(sampled_actions)
     if np.random.randint(100)>95:
         #print(np.max(state), np.min(state))
         #print("YEERT")
@@ -339,6 +342,7 @@ ep_reward_list = []
 avg_reward_list = []
 
 reload =False
+
 if reload:
     actor_model.load_weights("SpringBox_actor.h5")
     critic_model.load_weights("SpringBox_critic.h5")

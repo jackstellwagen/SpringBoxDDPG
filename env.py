@@ -23,12 +23,13 @@ import warnings
 warnings.simplefilter('ignore', category=NumbaWarning)
 import SpringBox
 from SpringBox.integrator import integrate_one_timestep
+from SpringBox.illustration import get_mixing_hists
 from SpringBox.activation import *
 from SpringBox.post_run_hooks import post_run_hooks
 from SpringBox.measurements import do_measurements, do_one_timestep_correlation_measurement, get_mixing_score
 
 import matplotlib
-matplotlib.use('tkagg')
+#matplotlib.use('tkagg')
 import matplotlib.pyplot as plt
 
 ex = Experiment('SpringBox')
@@ -109,10 +110,11 @@ def get_sim_info(old_sim_info, _config, i):
 class SpringBoxEnv(gym.Env):
     """Custom Environment that follows gym interface"""
     metadata = {'render.modes': ['human']}
-    def __init__(self, grid_size, THRESH):
+    def __init__(self, grid_size, THRESH, CAP = 4):
         super(SpringBoxEnv, self).__init__()
 
         self.THRESH = THRESH
+        self.CAP = CAP
         self.grid_size = grid_size
         self._config = cfg()
 
@@ -140,9 +142,12 @@ class SpringBoxEnv(gym.Env):
         self.N_steps = int(self._config['T']/self._config['dt'])
         self.current_step = 0
 
-        self.action_space = spaces.Box(low = 0, high = 1, shape = (self.grid_size * self.grid_size,))
-        # Example for using image as input:
-        self.observation_space = spaces.Box(low=0, high=1, shape= (self.grid_size*10 * self.grid_size*10,))
+        #self.action_space = spaces.Box(low = 0, high = 1, shape = (self.grid_size * self.grid_size,))
+        ## Example for using image as input:
+        #self.observation_space = spaces.Box(low=0, high=1, shape= (self.grid_size*10 * self.grid_size*10,))
+        self.action_space = spaces.Box(low = 0, high = 1, shape = (self.grid_size , self.grid_size,))
+        ## Example for using image as input:
+        self.observation_space = spaces.Box(low=0, high=1, shape= (2, self.grid_size,  self.grid_size))
         self.obs = np.zeros_like(self.observation_space.sample())
 
         plt.ion()
@@ -155,8 +160,12 @@ class SpringBoxEnv(gym.Env):
         self.previous_score = None
 
 
-
     def calculate_obs(self):
+        _, _, H1, H2 = get_mixing_hists(self.pXs, self.grid_size, self.sim_info, cap=self.CAP)
+        return np.array([H1,H2])
+
+
+    def calculate_obs_old(self):
         #The observation is just a grid 10x larger than the action space
         # where each element is the amount of particles in that zone
         L = self._config['L']
@@ -182,7 +191,7 @@ class SpringBoxEnv(gym.Env):
         self.obs = obs
 
 
-        return ((self.obs - np.mean(self.obs))/(np.std(self.obs) + 1e-8)).flatten()
+        return (self.obs - np.mean(self.obs))/(np.std(self.obs) + 1e-8)
 
     def sample_action(self):
         return self.action_space.sample()
@@ -204,7 +213,7 @@ class SpringBoxEnv(gym.Env):
 
         if self.previous_score == None:
             obs = self.calculate_obs()
-            self.previous_score = get_mixing_score(self.pXs,self._config, self.sim_info)
+            self.previous_score = get_mixing_score(self.pXs,self._config)
 
 
         activation_fn = activation_fn_dispatcher(self._config, self.sim_info['t'],lx = self.X, ly = self.Y, lh = np.transpose(A))
@@ -222,7 +231,7 @@ class SpringBoxEnv(gym.Env):
                                                                  use_interpolated_fluid_velocities=self._config['use_interpolated_fluid_velocities'])
 
 
-        score = get_mixing_score(self.pXs,self._config, self.sim_info)
+        score = get_mixing_score(self.pXs,self._config)
 
         if self.current_step > self.N_steps:
             done = True
