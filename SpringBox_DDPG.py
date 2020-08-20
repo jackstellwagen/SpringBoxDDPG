@@ -1,3 +1,5 @@
+# Based on https://keras.io/examples/rl/ddpg_pendulum/
+
 import gym
 import tensorflow as tf
 from tensorflow.keras import layers
