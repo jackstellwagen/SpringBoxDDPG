@@ -4,3 +4,4 @@ data/
 
 # Ignore data files
 *.h5
+*.png

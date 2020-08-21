@@ -1,9 +1,5 @@
 import gym
 from gym import spaces
-import numpy as np
-import cv2
-from PIL import Image
-
 
 from sacred import Experiment, SETTINGS
 from sacred.dependencies import PackageDependency
@@ -15,13 +11,12 @@ from tqdm import tqdm as std_tqdm
 
 tqdm = partial(std_tqdm, ncols=100)
 import time
-import datetime
 import os
 import numba
 from numba.errors import NumbaWarning
 import warnings
-
 warnings.simplefilter("ignore", category=NumbaWarning)
+
 import SpringBox
 from SpringBox.integrator import integrate_one_timestep
 from SpringBox.illustration import get_mixing_hists
@@ -34,7 +29,6 @@ from SpringBox.measurements import (
 )
 
 import matplotlib
-
 # matplotlib.use('tkagg')
 import matplotlib.pyplot as plt
 
@@ -50,14 +44,14 @@ def cfg():
     sweep_experiment = False
     mixing_experiment = True
     run_id = 0
-    savefreq_fig = 3
-    savefreq_data_dump = 3
+    savefreq_fig = int(1e6) 
+    savefreq_data_dump = 100000
     # Speeds up the computation somewhat, but incurs an error due to oversmoothing of fluids (which could however be somewhat physical)
     use_interpolated_fluid_velocities = True
-    dt = 0.01
-    T = 1
-    particle_density = 31.25
-    MAKE_VIDEO = True
+    dt = 0.05
+    T = 1.
+    particle_density = 6.
+    MAKE_VIDEO = False
     SAVEFIG = False
     const_particle_density = False
     measure_one_timestep_correlator = False
@@ -66,7 +60,7 @@ def cfg():
     ## Geometry parameters / Activation Fn
     # activation_fn_type = 'const-rectangle' # For the possible choices, see the activation.py file
     activation_fn_type = "activation_matrix"
-    AR = 0.75
+    #AR = 0.75
     L = 2
     n_part = int(particle_density * ((2 * L) ** 2))
     if mixing_experiment:
@@ -77,11 +71,9 @@ def cfg():
     m_init = 1.0
     activation_decay_rate = 10.0  # Ex. at dt=0.01 this leads to an average deactivation of 10% of the particles
     # Spring properties
-    spring_cutoff = 50.0 / np.sqrt(
-        n_part
-    )  # Always have a same average of particles that interact
+    spring_cutoff = 1.5
     spring_lower_cutoff = spring_cutoff / 25
-    spring_k = 1.0
+    spring_k = 3.0
     spring_r0 = 0.2
     # LJ properties
     LJ_eps = 0.0
@@ -92,7 +84,7 @@ def cfg():
 
     ## Fluid parameters
     mu = 10.0
-    Rdrag = 0.01
+    Rdrag = 0.0
     drag_factor = 1
 
 
@@ -190,30 +182,6 @@ class SpringBoxEnv(gym.Env):
             self.pXs, self.grid_size, self.sim_info, cap=self.CAP
         )
         return np.array([H1, H2])
-
-    def calculate_obs_old(self):
-        # The observation is just a grid 10x larger than the action space
-        # where each element is the amount of particles in that zone
-        L = self._config["L"]
-        split = len(self.pXs) // 2
-        obs = np.zeros((self.grid_size * 10, self.grid_size * 10), dtype=np.uint8)
-        xs = (((self.pXs[:, 0] + L) / (2 * L)) * 10 * self.grid_size).astype(int)
-        ys = (((-self.pXs[:, 1] + L) / (2 * L)) * 10 * self.grid_size).astype(int)
-
-        # xs = (((self.pXs[split:,0] + L)/ (2*L) )*10 * self.grid_size).astype(int)
-        # ys = (((-self.pXs[split:,1] + L)/ (2*L))*10 * self.grid_size).astype(int)
-        # xs1 = (((self.pXs[:split,0] + L)/ (2*L) )*10 * self.grid_size).astype(int)
-        # ys1 = (((-self.pXs[:split,1] + L)/ (2*L))*10 * self.grid_size).astype(int)
-
-        xs = np.clip(0, self.grid_size * 10 - 1, xs)
-        ys = np.clip(0, self.grid_size * 10 - 1, ys)
-
-        for i in range(len(xs)):
-            obs[xs[i], ys[i]] += 1
-            # obs[xs1[i],ys1[i]] +=1
-        self.obs = obs
-
-        return (self.obs - np.mean(self.obs)) / (np.std(self.obs) + 1e-8)
 
     def sample_action(self):
         return self.action_space.sample()

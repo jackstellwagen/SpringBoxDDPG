@@ -7,13 +7,13 @@ import numpy as np
 import matplotlib.pyplot as plt
 from env import SpringBoxEnv
 import sys
+from tqdm import tqdm
+from scipy.stats import sem
 
 
 grid_size = 10
 THRESH = 0.75
-problem = "gym_SpringBoxEnv:SpringBoxEnv-v0"
 
-# env = gym.make(problem, grid_size = grid_size, THRESH = THRESH)
 env = SpringBoxEnv(grid_size=grid_size, THRESH=THRESH)
 
 num_states = env.observation_space.shape
@@ -22,7 +22,6 @@ num_actions = env.action_space.shape
 print("Size of Action Space ->  {}".format(num_actions))
 
 upper_bound = env.action_space.high[0][0]
-# print(upper_bound, "UB")
 lower_bound = env.action_space.low[0][0]
 
 print("Max Value of Action ->  {}".format(upper_bound))
@@ -33,8 +32,6 @@ To implement better exploration by the Actor network, we use noisy perturbations
 an **Ornstein-Uhlenbeck process** for generating noise, as described in the paper.
 It samples noise from a correlated normal distribution.
 """
-
-
 class OUActionNoise:
     def __init__(self, mean, std_deviation, theta=0.15, dt=1e-2, x_initial=None):
         self.theta = theta
@@ -61,30 +58,9 @@ class OUActionNoise:
         else:
             self.x_prev = np.zeros_like(self.mean)
 
-
-"""
-The `Buffer` class implements Experience Replay.
----
-![Algorithm](https://i.imgur.com/mS6iGyJ.jpg)
----
-**Critic loss** - Mean Squared Error of `y - Q(s, a)`
-where `y` is the expected return as seen by the Target network,
-and `Q(s, a)` is action value predicted by the Critic network. `y` is a moving target
-that the critic model tries to achieve; we make this target
-stable by updating the Target model slowly.
-**Actor loss** - This is computed using the mean of the value given by the Critic network
-for the actions taken by the Actor network. We seek to maximize this quantity.
-Hence we update the Actor network so that it produces actions that get
-the maximum predicted value as seen by the Critic, for a given state.
-"""
-
-
 class Buffer:
     def __init__(self, buffer_capacity=100000, batch_size=64):
-
-        # Number of "experiences" to store at max
         self.buffer_capacity = buffer_capacity
-        # Num of tuples to train on.
         self.batch_size = batch_size
 
         # Its tells us num of times record() was called.
@@ -92,42 +68,34 @@ class Buffer:
 
         # Instead of list of tuples as the exp.replay concept go
         # We use different np.arrays for each tuple element
-        self.state_buffer = np.zeros(
-            (self.buffer_capacity, num_states[0], num_states[1], num_states[2])
-        )
-        self.action_buffer = np.zeros(
-            (self.buffer_capacity, num_actions[0], num_actions[1])
-        )
-        self.reward_buffer = np.zeros((self.buffer_capacity, 1))
-        self.next_state_buffer = np.zeros(
-            (self.buffer_capacity, num_states[0], num_states[1], num_states[2])
-        )
+        self.state_buffer      = np.zeros((self.buffer_capacity, *num_states ))
+        self.action_buffer     = np.zeros((self.buffer_capacity, *num_actions))
+        self.reward_buffer     = np.zeros((self.buffer_capacity, 1           ))
+        self.next_state_buffer = np.zeros((self.buffer_capacity, *num_states ))
 
     # Takes (s,a,r,s') obervation tuple as input
     def record(self, obs_tuple):
         # Set index to zero if buffer_capacity is exceeded,
         # replacing old records
         index = self.buffer_counter % self.buffer_capacity
-        self.state_buffer[index] = obs_tuple[0]
-        self.action_buffer[index] = obs_tuple[1]
-        self.reward_buffer[index] = obs_tuple[2]
+        self.state_buffer[index]      = obs_tuple[0]
+        self.action_buffer[index]     = obs_tuple[1]
+        self.reward_buffer[index]     = obs_tuple[2]
         self.next_state_buffer[index] = obs_tuple[3]
-
         self.buffer_counter += 1
 
     # We compute the loss and update parameters
     def learn(self):
         # Get sampling range
-
         record_range = min(self.buffer_counter, self.buffer_capacity)
         # Randomly sample indices
         batch_indices = np.random.choice(record_range, self.batch_size)
 
         # Convert to tensors
-        state_batch = tf.convert_to_tensor(self.state_buffer[batch_indices])
-        action_batch = tf.convert_to_tensor(self.action_buffer[batch_indices])
-        reward_batch = tf.convert_to_tensor(self.reward_buffer[batch_indices])
-        reward_batch = tf.cast(reward_batch, dtype=tf.float32)
+        state_batch      = tf.convert_to_tensor(self.state_buffer[batch_indices])
+        action_batch     = tf.convert_to_tensor(self.action_buffer[batch_indices])
+        reward_batch     = tf.convert_to_tensor(self.reward_buffer[batch_indices])
+        reward_batch     = tf.cast(reward_batch, dtype= tf.float32)
         next_state_batch = tf.convert_to_tensor(self.next_state_buffer[batch_indices])
 
         # Training and updating Actor & Critic networks.
@@ -152,8 +120,6 @@ class Buffer:
             actor_loss = -tf.math.reduce_mean(critic_value)
 
         actor_grad = tape.gradient(actor_loss, actor_model.trainable_variables)
-        if np.random.randint(100) > 95:
-            print(actor_grad)
         actor_optimizer.apply_gradients(
             zip(actor_grad, actor_model.trainable_variables)
         )
@@ -210,8 +176,8 @@ def get_actor():
         64,
         3,
         strides=1,
-        activation="relu",
-        kernel_initializer=last_init,
+        #activation="relu",
+        #kernel_initializer=last_init,
         data_format="channels_first",
     )(inputs)
     out = layers.BatchNormalization()(out)
@@ -297,19 +263,11 @@ exploration.
 def policy(state, noise_object):
     sampled_actions = actor_model(state)
     sampled_actions = tf.squeeze(sampled_actions)
-    if np.random.randint(100) > 95:
-        # print(np.max(state), np.min(state))
-        # print("YEERT")
-        print(sampled_actions, "sampled")
-        # print(actor_model.get_weights())
-    # print(sampled_actions.shape, "SA SHAPE")
     noise = noise_object()
-    # Adding noise to action
     sampled_actions = sampled_actions.numpy() + noise
 
     # We make sure action is within bounds
     legal_action = np.clip(sampled_actions, lower_bound, upper_bound)
-
     return [np.squeeze(legal_action)]
 
 
@@ -342,7 +300,8 @@ actor_lr = 0.0001
 critic_optimizer = tf.keras.optimizers.Adam(critic_lr, clipnorm=1.0)
 actor_optimizer = tf.keras.optimizers.Adam(actor_lr, clipnorm=1.0)
 
-total_episodes = 25000
+total_episodes = 100
+#total_episodes = 5
 # Discount factor for future rewards
 gamma = 0.99
 # Used to update target networks
@@ -360,6 +319,7 @@ along with updating the Target networks at a rate `tau`.
 ep_reward_list = []
 # To store average reward history of last few episodes
 avg_reward_list = []
+std_reward_list = []
 
 reload = False
 
@@ -372,7 +332,7 @@ if reload:
 
 # Takes about 20 min to train
 render = False
-for ep in range(total_episodes):
+for ep in tqdm(range(total_episodes)):
 
     prev_state = env.reset()
     episodic_reward = 0
@@ -407,12 +367,14 @@ for ep in range(total_episodes):
 
     # Mean of last 40 episodes
     render = False
-    if ep % 5 == 0:
-        render = True
+    #if ep % 5 == 0:
+    #    render = True
     avg_reward = np.mean(ep_reward_list[-40:])
-    if ep % 1 == 0:
-        print("Episode * {} * Avg Reward is ==> {}".format(ep, avg_reward))
+    std_reward = sem(ep_reward_list[-40:])
+    #if ep % 1 == 0:
+    #    #print("Episode * {} * Avg Reward is ==> {}".format(ep, avg_reward))
     avg_reward_list.append(avg_reward)
+    std_reward_list.append(std_reward)
 
     if ep % 10 == 0:
         actor_model.save_weights("SpringBox_actor.h5")
@@ -424,7 +386,8 @@ for ep in range(total_episodes):
 
 # Plotting graph
 # Episodes versus Avg. Rewards
-plt.plot(avg_reward_list)
+plt.errorbar(range(total_episodes),avg_reward_list, std_reward_list)
 plt.xlabel("Episode")
 plt.ylabel("Avg. Epsiodic Reward")
-plt.show()
+plt.tight_layout()
+plt.savefig('avg_reward.png')
