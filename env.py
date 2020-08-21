@@ -13,7 +13,7 @@ tqdm = partial(std_tqdm, ncols=100)
 import time
 import os
 import numba
-from numba.errors import NumbaWarning
+from numba.core.errors import NumbaWarning
 import warnings
 warnings.simplefilter("ignore", category=NumbaWarning)
 
