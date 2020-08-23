@@ -1,7 +1,0 @@
-README.md
-setup.py
-SpringBoxEnv.egg-info/PKG-INFO
-SpringBoxEnv.egg-info/SOURCES.txt
-SpringBoxEnv.egg-info/dependency_links.txt
-SpringBoxEnv.egg-info/requires.txt
-SpringBoxEnv.egg-info/top_level.txt
