@@ -1,0 +1,8 @@
+# Ignore temporary folders
+__pycache__
+data/
+raytune/
+
+# Ignore data files
+*.h5
+*.png
