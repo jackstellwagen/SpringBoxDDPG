@@ -343,7 +343,7 @@ for ep in range(total_episodes):
     render = False
     if ep %20 ==0:
         render = True
-    if ep % 20 == 0:
+    if ep % 20 == 25:
         actor_model.save_weights("SpringBox_actor.h5")
         critic_model.save_weights("SpringBox_critic.h5")
 
