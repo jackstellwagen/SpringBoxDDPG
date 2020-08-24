@@ -44,7 +44,7 @@ def cfg():
     sweep_experiment = False
     mixing_experiment = True
     run_id = 0
-    savefreq_fig = int(1e6) 
+    savefreq_fig = int(1e6)
     savefreq_data_dump = 100000
     # Speeds up the computation somewhat, but incurs an error due to oversmoothing of fluids (which could however be somewhat physical)
     use_interpolated_fluid_velocities = True
