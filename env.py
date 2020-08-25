@@ -29,7 +29,7 @@ from SpringBox.measurements import (
 )
 
 import matplotlib
-# matplotlib.use('tkagg')
+matplotlib.use('tkagg')
 import matplotlib.pyplot as plt
 
 ex = Experiment("SpringBox")
@@ -44,13 +44,13 @@ def cfg():
     sweep_experiment = False
     mixing_experiment = True
     run_id = 0
-    savefreq_fig = int(1e6) 
+    savefreq_fig = int(1e6)
     savefreq_data_dump = 100000
     # Speeds up the computation somewhat, but incurs an error due to oversmoothing of fluids (which could however be somewhat physical)
     use_interpolated_fluid_velocities = True
     dt = 0.05
     T = 1.
-    particle_density = 6.
+    particle_density = 6. *2
     MAKE_VIDEO = False
     SAVEFIG = False
     const_particle_density = False
@@ -179,9 +179,16 @@ class SpringBoxEnv(gym.Env):
 
     def calculate_obs(self):
         _, _, H1, H2 = get_mixing_hists(
-            self.pXs, self.grid_size, self.sim_info, cap=self.CAP
-        )
-        return np.array([H1, H2])
+            self.pXs, self.grid_size, self.sim_info )#, cap=self.CAP
+        #)
+        obs = np.array([H1,H2])
+        #print(obs)
+        #return np.array([H1, H2])
+        l = (obs - np.mean(obs) )/( np.std(obs))
+        #l = (obs - obs.min())/(obs.max() - obs.min())
+        #print(l, l.max(), l.min())
+        return l
+
 
     def sample_action(self):
         return self.action_space.sample()
