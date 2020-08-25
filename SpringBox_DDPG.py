@@ -12,7 +12,7 @@ from scipy.stats import sem
 
 
 grid_size = 10
-THRESH = 0.75
+THRESH = 0.5
 
 env = SpringBoxEnv(grid_size=grid_size, THRESH=THRESH)
 
@@ -176,8 +176,8 @@ def get_actor():
         64,
         3,
         strides=1,
-        #activation="relu",
-        #kernel_initializer=last_init,
+        activation="relu",
+        kernel_initializer=last_init,
         data_format="channels_first",
     )(inputs)
     out = layers.BatchNormalization()(out)
@@ -191,7 +191,7 @@ def get_actor():
     out = layers.Flatten()(out)
     out = layers.BatchNormalization()(out)
     outputs = layers.Dense(
-        num_actions[0] * num_actions[1], activation="relu", kernel_initializer=last_init
+        num_actions[0] * num_actions[1], activation="tanh", kernel_initializer=last_init
     )(out)
     outputs = layers.Reshape((num_actions[0], num_actions[1]))(outputs)
     # Our upper bound is 2.0 for Pendulum.
@@ -300,7 +300,7 @@ actor_lr = 0.0001
 critic_optimizer = tf.keras.optimizers.Adam(critic_lr, clipnorm=1.0)
 actor_optimizer = tf.keras.optimizers.Adam(actor_lr, clipnorm=1.0)
 
-total_episodes = 100
+total_episodes = 75
 #total_episodes = 5
 # Discount factor for future rewards
 gamma = 0.99
@@ -367,12 +367,12 @@ for ep in tqdm(range(total_episodes)):
 
     # Mean of last 40 episodes
     render = False
-    #if ep % 5 == 0:
+    # if ep % 5 == 0:
     #    render = True
     avg_reward = np.mean(ep_reward_list[-40:])
     std_reward = sem(ep_reward_list[-40:])
-    #if ep % 1 == 0:
-    #    #print("Episode * {} * Avg Reward is ==> {}".format(ep, avg_reward))
+    if ep % 1 == 0:
+       print("Episode * {} * Avg Reward is ==> {}".format(ep, avg_reward))
     avg_reward_list.append(avg_reward)
     std_reward_list.append(std_reward)
 
